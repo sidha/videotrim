@@ -20,7 +20,7 @@ from pydub import AudioSegment
 from pydub.silence import split_on_silence
 from pydub.silence import detect_silence
 from pydub.silence import detect_nonsilent
-from moviepy.editor import VideoFileClip
+from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
 from multiprocessing import Process, Semaphore
 
 sys.path.append(".")
@@ -222,8 +222,32 @@ class SplitVideo(object):
             clip = VideoFileClip(options["filepath"]).subclip(starttime, endtime).resize((1280, 720))
             # clip.write_videofile("output_{}-{}.mp4".format(starttime, endtime), fps=original_video.fps, bitrate="3000k",
             #                  threads=1, preset='ultrafast', codec='h264')
-            
-            clip.write_videofile("output_{}-{}.mp4".format(starttime, endtime), fps=original_video.fps, bitrate="3000k",
+
+            # setting position of text in the center and duration will be 10 seconds 
+            # txt_clip = txt_clip.set_pos('top').set_duration(10) 
+            # txt_clip = txt_clip.on_color() 
+
+            components = options["filepath"].split("/")
+            filename = components[-1]
+            folder_name = components[-2]
+
+            # txt = TextClip('{}'.format(filename), font='Roboto',
+            #                 color='white', fontsize=42, method='caption').set_duration(10) 
+            txt = TextClip('faweaaw e f aw ef a we faaw e f\naw ef a aaw e f aw ef a aaw e f aw ef a aaw e\nf aw ef a aaw e f aw ef a ', font='Roboto',
+                            color='white', fontsize=42, method='caption', size=(clip.w, 200)).set_duration(10) 
+
+            txt_col = txt.on_color(size=(clip.w + txt.w,txt.h-10),
+                            color=(0,0,0), pos=(6,'center'), col_opacity=0.6)
+
+            # Overlay the text clip on the first video clip 
+            video = CompositeVideoClip([clip, txt_col]) 
+
+            # showing video 
+            # video.ipython_display(width = 280) 
+
+            # clip.write_videofile("output_{}-{}.mp4".format(starttime, endtime), fps=original_video.fps, bitrate="3000k",
+            #                  threads=1, preset='ultrafast', codec='libx264', audio_codec='aac')
+            video.write_videofile("output_{}-{}.mp4".format(starttime, endtime), fps=original_video.fps, bitrate="3000k",
                              threads=1, preset='ultrafast', codec='libx264', audio_codec='aac')
 
 
