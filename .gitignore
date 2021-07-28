@@ -1,0 +1,7 @@
+job_output.log
+printpillsenv/
+.vscode/
+__pycache__/
+envvideotrim
+*.mp3
+*.mp4
