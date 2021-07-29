@@ -40,6 +40,24 @@ def get_all_values(d):
     else:
         yield d 
 
+def _get_seconds(time_str):
+    print('Time in hh:mm:ss:', time_str)
+    # split in hh, mm, ss
+    hh, mm, ss = time_str.split(':')
+    return int(hh) * 3600 + int(mm) * 60 + int(ss)
+
+from datetime import timedelta
+
+def _get_time_hh_mm_ss(sec):
+    # create timedelta and convert it into string
+    td_str = str(timedelta(seconds=sec))
+    # print('Time in seconds:', sec)
+
+    # split string into individual component
+    x = td_str.split(':')
+    # print('Time in hh:mm:ss:', x[0], 'Hours', x[1], 'Minutes', x[2], 'Seconds')
+    return x
+
 class Main(object):
     def __init__(self):
         parser = argparse.ArgumentParser(
@@ -146,10 +164,10 @@ class SplitVideo(object):
         # prefixing the argument with -- means it's optional
         # parser.add_argument('dir')
         parser.add_argument('video')#, help='<Required> Set flag', required=True)
-        parser.add_argument('times', nargs='+', type=int) #, help='<Required> Set flag', required=True)
+        parser.add_argument('times', nargs='+') #, help='<Required> Set flag', required=True)
         parser.add_argument('--dry-run', dest='dry_run', action='store_true')
         parser.add_argument('--file-extension', dest='file_extension', help='walk dirs to find these types, default is mp4')
-        # parser.add_argument('--sticker-pack-name', dest='sticker_pack_name', help='name of sticker pack to print')
+        parser.add_argument('--title', dest='title', help='title to render at top of videos')
         # parser.add_argument('--sticker-count', dest='sticker_count', help='number of stickers to print in job')
         # parser.add_argument('--sticker-size', dest='sticker_size', help='regular or mini')
         parser.add_argument('--modified-since', dest='modified_since', type=datetime.datetime.fromisoformat, help='date in ISO format')
@@ -200,28 +218,48 @@ class SplitVideo(object):
         for t in it:
             starttime = t
             endtime = next(it)
-            self.generate_clip(options["filepath"], starttime, endtime, original_video.fps)
 
-    def generate_clip(self, filepath, starttime, endtime, fps):
-        print('generate_clip')
-        clip = VideoFileClip(filepath).subclip(starttime, endtime)#.resize((1280, 720))
-        # clip.write_videofile("output_{}-{}.mp4".format(starttime, endtime), fps=original_video.fps, bitrate="3000k",
-        #                  threads=1, preset='ultrafast', codec='h264')
+            self.generate_clip(options["filepath"], _get_seconds(starttime), _get_seconds(endtime), original_video.fps, args.title)
+
+    def generate_clip(self, filepath, starttime, endtime, fps, title):
+        # print('generate_clip')
+        composites = []
         
-        # # Generate a text clip 
-        txt_clip_title = TextClip("The Highwire Episode 225\nVaccine hesitancy and stuff\nRumble: https://rumble.com/there", fontsize = 36, color = 'white')
-        txt_clip_title = txt_clip_title.on_color((clip.w, txt_clip_title.h + 6), color=(0, 0, 0), col_opacity=0.7, pos=(6, 'top'))
+        clip = VideoFileClip(filepath).subclip(starttime, endtime)#.resize((1280, 720))
+        composites.append(clip)
 
-        # txt_clip.on_color(size=(txt_clip.w+10,txt_clip.h), color="black", col_opacity=0.5)
+        # Generate a text clip if we have a title
+        if title is not None:
+            txt_clip_title = TextClip(title, fontsize = 42, color = 'white')
+            txt_clip_title = txt_clip_title.on_color((clip.w, txt_clip_title.h + 6), color=(0, 0, 0), col_opacity=0.7, pos=(6, 'top'))
 
-        # setting position of text in the center and duration will be 5 seconds 
-        txt_clip_title = txt_clip_title.set_pos('top').set_duration(3) 
+            # txt_clip.on_color(size=(txt_clip.w+10,txt_clip.h), color="black", col_opacity=0.5)
+
+            # setting position of text in the center and duration will be 5 seconds 
+            txt_clip_title = txt_clip_title.set_pos('top').set_duration(10) 
+            composites.append(txt_clip_title)
             
         # Overlay the text clip on the first video clip 
-        video = CompositeVideoClip([clip, txt_clip_title]) 
+        video = CompositeVideoClip(composites) 
         # video = CompositeVideoClip([clip, txt_clip_title, txt_clip_description])
 
-        video.write_videofile("output_{}-{}.mp4".format(starttime, endtime), fps=fps, bitrate="3000k",
+        duration_sec = endtime-starttime
+        duration = _get_time_hh_mm_ss(duration_sec)
+        # print('duration: {}'.format(duration))
+
+        duration_str = '{}-{}-{}'.format(duration[0], duration[1], duration[2])
+
+        filename_prefix = ''
+        # generate filename based on title if we have a title
+        if title is not None:
+            # get last 20 chars
+            suffix = title[-36:]
+            # print('suffix: {}'.format(suffix))
+            filename_prefix = ''.join(e for e in suffix if e.isalnum())
+        else:
+            filename_prefix = 'clip'
+        video.write_videofile("{}_{}-{}-{}.mp4".format(filename_prefix, starttime, endtime, duration_str), fps=fps, bitrate="3000k",
                             threads=1, preset='ultrafast', codec='libx264', audio_codec='aac')
+
 if __name__ == '__main__':
     Main()
