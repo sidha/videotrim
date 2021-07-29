@@ -168,6 +168,7 @@ class SplitVideo(object):
         parser.add_argument('--dry-run', dest='dry_run', action='store_true')
         parser.add_argument('--file-extension', dest='file_extension', help='walk dirs to find these types, default is mp4')
         parser.add_argument('--title', dest='title', help='title to render at top of videos')
+        parser.add_argument('--video-quality', dest='video_quality', help='high medium low')
         # parser.add_argument('--sticker-count', dest='sticker_count', help='number of stickers to print in job')
         # parser.add_argument('--sticker-size', dest='sticker_size', help='regular or mini')
         parser.add_argument('--modified-since', dest='modified_since', type=datetime.datetime.fromisoformat, help='date in ISO format')
@@ -187,7 +188,7 @@ class SplitVideo(object):
         # base_options = copy.deepcopy(args)
         # for path in paths:
         args_dict = args.__dict__
-        print('args_dict: {}'.format(args_dict))
+        LOG.info('args_dict: {}'.format(args_dict))
         sanitized = sanitize_filename(args.video)
         options = build_options(sanitized, args_dict)
         # video_files.append(options)
@@ -200,9 +201,6 @@ class SplitVideo(object):
         # for video in video_files:
         original_video = VideoFileClip(options["filepath"])
         duration = original_video.duration
-        LOG.info("original_video duration: {}".format(duration))
-
-
 
         # it = iter(options["times"])
 
@@ -215,13 +213,14 @@ class SplitVideo(object):
 
         it = iter(options["times"])
 
+
         for t in it:
             starttime = t
             endtime = next(it)
 
-            self.generate_clip(options["filepath"], _get_seconds(starttime), _get_seconds(endtime), original_video.fps, args.title)
+            self.generate_clip(options["filepath"], _get_seconds(starttime), _get_seconds(endtime), original_video.fps, options["title"], options["video_quality"])
 
-    def generate_clip(self, filepath, starttime, endtime, fps, title):
+    def generate_clip(self, filepath, starttime, endtime, fps, title, video_quality = 'high'):
         # print('generate_clip')
         composites = []
         
@@ -258,8 +257,32 @@ class SplitVideo(object):
             filename_prefix = ''.join(e for e in suffix if e.isalnum())
         else:
             filename_prefix = 'clip'
-        video.write_videofile("{}_{}-{}-{}.mp4".format(filename_prefix, starttime, endtime, duration_str), fps=fps, bitrate="3000k",
-                            threads=1, preset='ultrafast', codec='libx264', audio_codec='aac')
+
+        bitrate = '3000k'
+        preset = 'ultrafast'
+
+        if video_quality == 'high':
+            bitrate = '3000k'
+            preset = 'ultrafast'
+        elif video_quality == 'medium':
+            bitrate = '2000k'
+            preset = 'faster'
+        elif video_quality == 'low':
+            bitrate = '1500k'
+            preset = 'faster'
+        else:
+            bitrate = '3000k'
+            preset = 'ultrafast'
+
+        video.write_videofile(
+            "{}_{}-{}-{}.mp4".format(filename_prefix, starttime, endtime, duration_str),
+            fps=fps,
+            bitrate=bitrate,
+            threads=1,
+            preset=preset,
+            codec='libx264',
+            audio_codec='aac'
+        )
 
 if __name__ == '__main__':
     Main()
