@@ -195,36 +195,33 @@ class SplitVideo(object):
         #     video_path = "{}-{}-output.mp4".format(starttime, endtime)
         #     ffmpeg_extract_subclip(options["filepath"], starttime, endtime, targetname=video_path)
 
-
-
-
         it = iter(options["times"])
 
         for t in it:
             starttime = t
             endtime = next(it)
-            clip = VideoFileClip(options["filepath"]).subclip(starttime, endtime)#.resize((1280, 720))
-            # clip.write_videofile("output_{}-{}.mp4".format(starttime, endtime), fps=original_video.fps, bitrate="3000k",
-            #                  threads=1, preset='ultrafast', codec='h264')
+            self.generate_clip(options["filepath"], starttime, endtime, original_video.fps)
+
+    def generate_clip(self, filepath, starttime, endtime, fps):
+        print('generate_clip')
+        clip = VideoFileClip(filepath).subclip(starttime, endtime)#.resize((1280, 720))
+        # clip.write_videofile("output_{}-{}.mp4".format(starttime, endtime), fps=original_video.fps, bitrate="3000k",
+        #                  threads=1, preset='ultrafast', codec='h264')
+        
+        # # Generate a text clip 
+        txt_clip_title = TextClip("The Highwire Episode 225\nVaccine hesitancy and stuff\nRumble: https://rumble.com/there", fontsize = 36, color = 'white')
+        txt_clip_title = txt_clip_title.on_color((clip.w, txt_clip_title.h + 6), color=(0, 0, 0), col_opacity=0.7, pos=(6, 'top'))
+
+        # txt_clip.on_color(size=(txt_clip.w+10,txt_clip.h), color="black", col_opacity=0.5)
+
+        # setting position of text in the center and duration will be 5 seconds 
+        txt_clip_title = txt_clip_title.set_pos('top').set_duration(3) 
             
-            # # Generate a text clip 
-            txt_clip = TextClip("title\ndescrip\nthird", fontsize = 24, color = 'white')
-            txt_clip = txt_clip.on_color((clip.w, txt_clip.h + 6), color=(0, 0, 0), col_opacity=0.7, pos=(6, 'top'))
-            # txt_clip.on_color(size=(txt_clip.w+10,txt_clip.h), color="black", col_opacity=0.5)
+        # Overlay the text clip on the first video clip 
+        video = CompositeVideoClip([clip, txt_clip_title]) 
+        # video = CompositeVideoClip([clip, txt_clip_title, txt_clip_description])
 
-            # setting position of text in the center and duration will be 5 seconds 
-            txt_clip = txt_clip.set_pos('top').set_duration(3) 
-                
-            # Overlay the text clip on the first video clip 
-            video = CompositeVideoClip([clip, txt_clip]) 
-
-            video.write_videofile("output_{}-{}.mp4".format(starttime, endtime), fps=original_video.fps, bitrate="3000k",
-                             threads=1, preset='ultrafast', codec='libx264', audio_codec='aac')
-
-            # clip.write_videofile("output_{}-{}.mp4".format(starttime, endtime), fps=original_video.fps, bitrate="3000k",
-            #                  threads=1, preset='ultrafast', codec='libx264', audio_codec='aac')
-
-
-
+        video.write_videofile("output_{}-{}.mp4".format(starttime, endtime), fps=fps, bitrate="3000k",
+                            threads=1, preset='ultrafast', codec='libx264', audio_codec='aac')
 if __name__ == '__main__':
     Main()
