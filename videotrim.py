@@ -20,7 +20,7 @@ from pydub import AudioSegment
 from pydub.silence import split_on_silence
 from pydub.silence import detect_silence
 from pydub.silence import detect_nonsilent
-from moviepy.editor import VideoFileClip
+from moviepy.editor import VideoFileClip, ColorClip, CompositeVideoClip, TextClip
 from multiprocessing import Process, Semaphore
 
 sys.path.append(".")
@@ -203,12 +203,26 @@ class SplitVideo(object):
         for t in it:
             starttime = t
             endtime = next(it)
-            clip = VideoFileClip(options["filepath"]).subclip(starttime, endtime).resize((1280, 720))
+            clip = VideoFileClip(options["filepath"]).subclip(starttime, endtime)#.resize((1280, 720))
             # clip.write_videofile("output_{}-{}.mp4".format(starttime, endtime), fps=original_video.fps, bitrate="3000k",
             #                  threads=1, preset='ultrafast', codec='h264')
             
-            clip.write_videofile("output_{}-{}.mp4".format(starttime, endtime), fps=original_video.fps, bitrate="3000k",
+            # # Generate a text clip 
+            txt_clip = TextClip("title\ndescrip\nthird", fontsize = 24, color = 'white')
+            txt_clip = txt_clip.on_color((clip.w, txt_clip.h + 6), color=(0, 0, 0), col_opacity=0.7, pos=(6, 'top'))
+            # txt_clip.on_color(size=(txt_clip.w+10,txt_clip.h), color="black", col_opacity=0.5)
+
+            # setting position of text in the center and duration will be 5 seconds 
+            txt_clip = txt_clip.set_pos('top').set_duration(3) 
+                
+            # Overlay the text clip on the first video clip 
+            video = CompositeVideoClip([clip, txt_clip]) 
+
+            video.write_videofile("output_{}-{}.mp4".format(starttime, endtime), fps=original_video.fps, bitrate="3000k",
                              threads=1, preset='ultrafast', codec='libx264', audio_codec='aac')
+
+            # clip.write_videofile("output_{}-{}.mp4".format(starttime, endtime), fps=original_video.fps, bitrate="3000k",
+            #                  threads=1, preset='ultrafast', codec='libx264', audio_codec='aac')
 
 
 
