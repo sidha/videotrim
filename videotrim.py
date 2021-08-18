@@ -16,12 +16,29 @@ import hashlib
 import uuid
 from random import randrange
 import logging
-from pydub import AudioSegment
-from pydub.silence import split_on_silence
-from pydub.silence import detect_silence
-from pydub.silence import detect_nonsilent
-from moviepy.editor import VideoFileClip, ColorClip, CompositeVideoClip, TextClip
+from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip
 from multiprocessing import Process, Semaphore
+import requests
+
+def _generate_cuttly_url(url):
+    api_key = "4f9a0768a8571c89aab9e2b8c0611911dde41"
+    # the URL you want to shorten
+    url = "https://www.thepythoncode.com/topic/using-apis-in-python"
+    # preferred name in the URL
+    api_url = f"https://cutt.ly/api/api.php?key={api_key}&short={url}"
+    # or
+    # api_url = f"https://cutt.ly/api/api.php?key={api_key}&short={url}&name=some_unique_name"
+    # make the request
+    data = requests.get(api_url).json()["url"]
+    if data["status"] == 7:
+        # OK, get shortened URL
+        shortened_url = data["shortLink"]
+        print("Shortened URL:", shortened_url)
+        return shortened_url
+    else:
+        print("[!] Error Shortening URL:", data)
+        return None
+
 
 sys.path.append(".")
 
@@ -61,8 +78,8 @@ def _get_time_hh_mm_ss(sec):
 class Main(object):
     def __init__(self):
         parser = argparse.ArgumentParser(
-            description='tools to manage voice audio chapters split into verses',
-            usage='''splitvideo
+            description='tools to manage large video clips',
+            usage='''python videotrim.py splitvideo <video.mp4> --clip-list list.json
 ''')
         parser.add_argument('command', help='Subcommand to run')
         # parse_args defaults to [1:] for args, but you need to
@@ -141,8 +158,15 @@ def sanitize_filename(filepath):
 
 
 def build_options(filepath, options):
-    components = filepath.split("/")
+    print('filepath: {}'.format(filepath))
+
+    filepath = os.path.normpath(filepath)
+    filepath = os.path.abspath(filepath)
+    filepath.split(os.sep)
+    components = filepath.split(os.sep) #filepath.split("/")
+    print('components: {}'.format(components))
     filename = components[-1]
+    print('filename: {}'.format(filename))
     folder_name = components[-2]
     options['filepath'] = filepath
     options['filename'] = filename
@@ -158,17 +182,17 @@ class SplitVideo(object):
         print('SplitVideo init')
 
     def start(self, args):
-        print('SplitVideo.start args {}'.format(args))
         parser = argparse.ArgumentParser(
             description='split video with provided second markers')
         # prefixing the argument with -- means it's optional
         # parser.add_argument('dir')
         parser.add_argument('video')#, help='<Required> Set flag', required=True)
-        parser.add_argument('times', nargs='+') #, help='<Required> Set flag', required=True)
+        parser.add_argument('--times', nargs='+') #, help='<Required> Set flag', required=True)
         parser.add_argument('--dry-run', dest='dry_run', action='store_true')
         parser.add_argument('--file-extension', dest='file_extension', help='walk dirs to find these types, default is mp4')
         parser.add_argument('--title', dest='title', help='title to render at top of videos')
         parser.add_argument('--video-quality', dest='video_quality', help='high medium low')
+        parser.add_argument('--clip-list', dest='clip_list', help='json file containing start and end times for clips')
         # parser.add_argument('--sticker-count', dest='sticker_count', help='number of stickers to print in job')
         # parser.add_argument('--sticker-size', dest='sticker_size', help='regular or mini')
         parser.add_argument('--modified-since', dest='modified_since', type=datetime.datetime.fromisoformat, help='date in ISO format')
@@ -193,14 +217,37 @@ class SplitVideo(object):
         options = build_options(sanitized, args_dict)
         # video_files.append(options)
 
-
-        if len(options["times"]) % 2 != 0:
-            print("there must be an even number of times")
-            exit()
+        if options["times"] is not None:
+            if len(options["times"]) % 2 != 0:
+                print("there must be an even number of times")
+                exit()
 
         # for video in video_files:
         original_video = VideoFileClip(options["filepath"])
         duration = original_video.duration
+
+        clips = self._open_json_cliplist(options['clip_list'])
+        LOG.info('clips: {}'.format(clips))
+
+        for clip in clips:
+
+            start = _get_seconds(clip['start_time'])
+            end = _get_seconds(clip['end_time'])
+            title = clip.get('title', None)
+
+            if start < duration and end < duration:
+                self.generate_clip(
+                    options['filepath'],
+                    _get_seconds(clip['start_time']),
+                    _get_seconds(clip['end_time']),
+                    original_video.fps,
+                    title,
+                    duration,
+                    clip,
+                    options['video_quality']
+                )
+            else:
+                LOG.info('skipping because either start or end is greater than duration')
 
         # it = iter(options["times"])
 
@@ -208,28 +255,42 @@ class SplitVideo(object):
         #     starttime = t
         #     endtime = next(it)
 
-        #     video_path = "{}-{}-output.mp4".format(starttime, endtime)
-        #     ffmpeg_extract_subclip(options["filepath"], starttime, endtime, targetname=video_path)
+        #     self.generate_clip(
+        #         options["filepath"],
+        #         _get_seconds(starttime),
+        #         _get_seconds(endtime),
+        #         original_video.fps, 
+        #         options["title"],
+        #         duration,
+        #         clips,
+        #         options["video_quality"]
+        #     )
 
-        it = iter(options["times"])
-
-
-        for t in it:
-            starttime = t
-            endtime = next(it)
-
-            self.generate_clip(options["filepath"], _get_seconds(starttime), _get_seconds(endtime), original_video.fps, options["title"], options["video_quality"])
-
-    def generate_clip(self, filepath, starttime, endtime, fps, title, video_quality = 'high'):
+    def generate_clip(self, filepath, starttime, endtime, fps, title, duration, clip_attrs, video_quality = 'high'):
         # print('generate_clip')
         composites = []
-        
         clip = VideoFileClip(filepath).subclip(starttime, endtime)#.resize((1280, 720))
+
+        # re-orient portrait videos
+        if clip.rotation == 90:
+            clip = clip.resize(clip.size[::-1])
+            clip.rotation = 0
+
+        # if clip.rotation == 90:
+        #     clip.resize((720, 1280))
+        #     clip.rotation = 0
+        LOG.info(f'clip.size: {clip.size}')
+        LOG.info(f'clip.rotation: {clip.rotation}')
         composites.append(clip)
 
         # Generate a text clip if we have a title
         if title is not None:
-            txt_clip_title = TextClip(title, fontsize = 42, color = 'white')
+            # if clip_attrs['source_url'] is not None:
+            #     if clip_attrs['shorten_source_url'] is True:
+            #         title = title + '\nSource: {}'.format(_generate_cuttly_url(clip_attrs['source_url']))
+            #     else:
+            #         title = title + '\nSource: {}'.format(clip_attrs['source_url'])
+            txt_clip_title = TextClip(title, font = 'Victor-Mono-Bold', fontsize = 42, color = 'white')
             txt_clip_title = txt_clip_title.on_color((clip.w, txt_clip_title.h + 6), color=(0, 0, 0), col_opacity=0.7, pos=(6, 'top'))
 
             # txt_clip.on_color(size=(txt_clip.w+10,txt_clip.h), color="black", col_opacity=0.5)
@@ -283,6 +344,15 @@ class SplitVideo(object):
             codec='libx264',
             audio_codec='aac'
         )
+
+    def _open_json_cliplist(self, json_filename):
+        try:
+            with open(json_filename) as json_file:
+                clips = json.load(json_file)
+                return clips
+        except OSError as e:
+            print(e.errno)
+
 
 if __name__ == '__main__':
     Main()

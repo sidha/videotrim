@@ -1,0 +1,14 @@
+[
+    {
+        "title": "Summary title\nSummary subtitle",
+        "start_time": "00:9:00",
+        "end_time": "00:10:21",
+        "video_quality": "low"
+    },
+    {
+        "title": "Summary title 2\nSummary subtitle 2",
+        "start_time": "00:01:00",
+        "end_time": "00:02:21",
+        "video_quality": "high"
+    }
+]
